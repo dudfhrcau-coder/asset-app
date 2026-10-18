@@ -57,3 +57,14 @@ create policy "family reads news" on public.news for select to authenticated usi
 do $$ begin
   alter publication supabase_realtime add table public.assets;
 exception when duplicate_object then null; end $$;
+
+-- 부동산: 매일 아침 예약 작업이 조사해 넣음(budget 1행, watch 관심 단지, pick 오늘의 추천)
+create table if not exists public.homes (
+  id text primary key,
+  kind text not null check (kind in ('watch','pick','budget')),
+  data jsonb not null,
+  as_of date not null default current_date,
+  updated_at timestamptz not null default now()
+);
+alter table public.homes enable row level security;
+create policy homes_read on public.homes for select to authenticated using (public.is_member());
