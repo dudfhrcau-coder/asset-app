@@ -68,3 +68,11 @@ create table if not exists public.homes (
 );
 alter table public.homes enable row level security;
 create policy homes_read on public.homes for select to authenticated using (public.is_member());
+
+-- 국토부 실거래 API 응답 캐시(trades 함수만 씀)
+create table if not exists public.molit_cache (
+  key text primary key,
+  body jsonb not null,
+  fetched_at timestamptz not null default now()
+);
+alter table public.molit_cache enable row level security;

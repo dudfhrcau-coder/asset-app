@@ -189,7 +189,7 @@ h2{font-size:13px;color:var(--muted);font-weight:600;margin:6px 2px 0;display:fl
 <script src="config.js"></script>
 <script>
 const KEY='asset-app';
-const APP_VER='10.18-9';
+const APP_VER='10.19-1';
 // 한 화면만 쓰는 앱이라 브라우저 잠금은 쓰지 않음. 새로고침할 때 이전 화면의 잠금이 남아 멈추는 문제를 피함
 const sb=supabase.createClient(window.APP_CONFIG.supabaseUrl,window.APP_CONFIG.supabaseAnonKey,{auth:{lock:(_n,_t,fn)=>fn()}});
 // S.items는 assets 테이블의 data 열. 현재가와 환율은 시세 서버에서 받아 화면에만 씀.
@@ -214,6 +214,15 @@ async function loadHomes(){
   if(error||!data)return;
   HOMES={budget:data.find(r=>r.kind==='budget')?.data||null,watch:data.filter(r=>r.kind==='watch').map(r=>r.data),
     pick:data.find(r=>r.kind==='pick')?.data||null,asOf:data.reduce((a,r)=>r.as_of>a?r.as_of:a,'')};
+  if(tab==='home')render();
+  loadTrades();
+}
+// 관심 단지·추천 단지의 실거래는 국토부 API에서 바로 받아 덮어씀(실패하면 저장된 값 유지)
+async function loadTrades(){
+  const list=[...HOMES.watch,HOMES.pick].filter(x=>x?.molit);if(!list.length)return;
+  const {data,error}=await sb.functions.invoke('trades',{body:{items:list.map((x,i)=>({id:String(i),...x.molit}))}});
+  if(error||!data?.trades)return;
+  list.forEach((x,i)=>{const t=data.trades[String(i)];if(t?.length){x.trades=t;x.molitOk=true}});
   if(tab==='home')render();
 }
 async function loadNews(){
@@ -292,8 +301,8 @@ function eok(m){if(m==null||isNaN(m))return '-';const e=Math.floor(m/10000),r=Ma
   return e?(e+'억'+(r?' '+r.toLocaleString('ko-KR'):'')):r.toLocaleString('ko-KR')+'만'}
 function fit(region,price){const b=HOMES.budget?.[region];if(!b||!price)return '';const d=b.price_max-price;
   return d>=0?`<span class="tag2">예산 안 · ${eok(d)} 여유</span>`:`<span class="tag2" style="color:var(--up);background:transparent;border:1px solid var(--line)">예산보다 ${eok(-d)} 부족</span>`}
-function trades(list){if(!list?.length)return '';
-  return `<div class="label">최근 실거래</div><div class="trades">${list.slice(0,5).map(t=>`<div><span>${esc(String(t.d).replace(/^\d{4}-0?(\d+)-0?(\d+)$/,'$1/$2'))}</span><span class="hint">${t.dong?esc(t.dong)+'동 ':''}${t.floor!=null?esc(t.floor)+'층':''}</span><span class="p num">${eok(t.price)}</span></div>`).join('')}</div>`}
+function trades(list,gov){if(!list?.length)return '';
+  return `<div class="label">최근 실거래${gov?' · 국토부':''}</div><div class="trades">${list.slice(0,5).map(t=>`<div><span>${esc(String(t.d).replace(/^\d{4}-0?(\d+)-0?(\d+)$/,'$1/$2'))}</span><span class="hint">${t.dong?esc(t.dong)+'동 ':''}${t.floor!=null?esc(t.floor)+'층':''}</span><span class="p num">${eok(t.price)}</span></div>`).join('')}</div>`}
 function homes(){
   const H=HOMES;if(!H.budget&&!H.watch.length&&!H.pick)return '';
   const asOf=(H.asOf||'').replace(/^\d{4}-0?(\d+)-0?(\d+)$/,'$1월 $2일');
@@ -307,12 +316,12 @@ function homes(){
     h+=`<section class="hcard"><div class="htop"><span class="hname">${esc(w.name)} <span class="hint">${esc(w.type||'')}</span></span>${fit(w.region,lo)}</div>
     ${w.ask?`<div><span class="label">${esc(w.ask.label||'지금 매물 호가')}</span><div class="big num">${eok(w.ask.min)}${w.ask.max&&w.ask.max!==w.ask.min?' ~ '+eok(w.ask.max):''}</div>${w.ask.note?`<div class="hint">${esc(w.ask.note)}</div>`:''}</div>`:''}
     ${w.target?.length?`<div class="label">${esc(w.target_label||'원하는 동·층 매물')}</div><div class="trades">${w.target.map(t=>`<div><span>${esc(t.dong)}동</span><span class="hint">${esc(t.floor)}층</span><span class="p num">${eok(t.price)}</span></div>`).join('')}</div>`:(w.target_label?`<div class="hint">${esc(w.target_label)}: 지금 올라온 매물이 없어요</div>`:'')}
-    ${trades(w.trades)}${w.note?`<div class="hint">${esc(w.note)}</div>`:''}</section>`}
+    ${trades(w.trades,w.molitOk)}${w.note?`<div class="hint">${esc(w.note)}</div>`:''}</section>`}
   const p=H.pick;
   if(p)h+=`<section class="hcard"><div class="htop"><span class="hname"><span class="tag2">오늘의 추천</span> ${esc(p.name)}</span>${fit(p.region,p.price)}</div>
     <div class="hint">${[p.area,p.households&&p.households.toLocaleString('ko-KR')+'세대',p.built&&p.built+'년',p.type].filter(Boolean).map(esc).join(' · ')}</div>
     <div><span class="label">시세</span> <span class="big num">${eok(p.price)}</span>${p.price_note?` <span class="hint">${esc(p.price_note)}</span>`:''}</div>
-    ${p.why?.length?`<ul>${p.why.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''}${trades(p.trades)}</section>`;
+    ${p.why?.length?`<ul>${p.why.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''}${trades(p.trades,p.molitOk)}</section>`;
   return h;
 }
 function groupBy(arr){const m=new Map();arr.forEach(i=>{if(!m.has(i.inst))m.set(i.inst,[]);m.get(i.inst).push(i)});return m}
