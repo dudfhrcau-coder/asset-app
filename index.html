@@ -433,7 +433,8 @@ async function start(session){
   // 배우자가 고치면 바로 반영
   chan=sb.channel('assets').on('postgres_changes',{event:'*',schema:'public',table:'assets'},()=>loadAssets()).subscribe();
 }
-sb.auth.onAuthStateChange((_e,session)=>start(session));
+// 콜백 안에서 바로 Supabase를 부르면 로그인 잠금에 걸려 멈추므로 한 박자 늦춰 실행
+sb.auth.onAuthStateChange((_e,session)=>setTimeout(()=>start(session),0));
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&booted){loadAssets();refresh(null,true)}});
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
 </script>
