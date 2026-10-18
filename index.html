@@ -189,7 +189,7 @@ h2{font-size:13px;color:var(--muted);font-weight:600;margin:6px 2px 0;display:fl
 <script src="config.js"></script>
 <script>
 const KEY='asset-app';
-const APP_VER='10.19-6';
+const APP_VER='10.19-7';
 // 한 화면만 쓰는 앱이라 브라우저 잠금은 쓰지 않음. 새로고침할 때 이전 화면의 잠금이 남아 멈추는 문제를 피함
 const sb=supabase.createClient(window.APP_CONFIG.supabaseUrl,window.APP_CONFIG.supabaseAnonKey,{auth:{lock:(_n,_t,fn)=>fn()}});
 // S.items는 assets 테이블의 data 열. 현재가와 환율은 시세 서버에서 받아 화면에만 씀.
@@ -529,7 +529,7 @@ async function refresh(btn,quiet){
   const symbols=[...new Set(S.items.filter(i=>i.kind==='stock'&&i.symbol).flatMap(qsyms))];
   const {data,error}=await sb.functions.invoke('quotes',{body:{symbols}});
   if(error||!data){if(!quiet)toast('시세를 가져오지 못했어요. 잠시 뒤 다시 눌러주세요.');render();return}
-  Object.assign(LIVE,data.prices||{});for(const k in SESS)delete SESS[k];Object.assign(SESS,data.sessions||{});
+  for(const k in LIVE)delete LIVE[k];Object.assign(LIVE,data.prices||{});for(const k in SESS)delete SESS[k];Object.assign(SESS,data.sessions||{});
   if(data.usdkrw)S.fx={usdkrw:data.usdkrw,at:data.at||Date.now(),src:'Yahoo Finance'};
   S.items=S.items.map(withLive);
   try{localStorage.setItem(KEY+':quotes',JSON.stringify({prices:LIVE,sessions:SESS,usdkrw:S.fx.usdkrw,at:S.fx.at}))}catch(e){}
