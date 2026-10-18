@@ -176,8 +176,9 @@ let tab='home';
 try{tab=localStorage.getItem(KEY+':tab')||'home'}catch(e){}
 const LIVE={};// symbol -> 현재가
 try{const c=JSON.parse(localStorage.getItem(KEY+':quotes'));if(c){Object.assign(LIVE,c.prices||{});if(c.usdkrw)S.fx={usdkrw:c.usdkrw,at:c.at,src:'지난 시세'}}}catch(e){}
-const qsym=i=>i.market==='KR'?i.symbol+'.KS':i.symbol;
-function withLive(it){if(it.kind!=='stock')return it;const p=LIVE[qsym(it)];return p?{...it,price:p}:it}
+// 국내 종목은 코스피(.KS)와 코스닥(.KQ)을 둘 다 물어보고 값이 온 쪽을 씀
+const qsyms=i=>i.market==='KR'?[i.symbol+'.KS',i.symbol+'.KQ']:[i.symbol];
+function withLive(it){if(it.kind!=='stock')return it;const p=qsyms(it).map(s=>LIVE[s]).find(Boolean);return p?{...it,price:p}:it}
 
 async function loadAssets(){
   const {data,error}=await sb.from('assets').select('id,data').order('updated_at');
@@ -383,7 +384,7 @@ scrim.addEventListener('click',closeSheet);
 /* ---------- 시세 ---------- */
 async function refresh(btn,quiet){
   if(btn){btn.disabled=true;btn.textContent='가져오는 중…'}
-  const symbols=[...new Set(S.items.filter(i=>i.kind==='stock'&&i.symbol).map(qsym))];
+  const symbols=[...new Set(S.items.filter(i=>i.kind==='stock'&&i.symbol).flatMap(qsyms))];
   const {data,error}=await sb.functions.invoke('quotes',{body:{symbols}});
   if(error||!data){if(!quiet)toast('시세를 가져오지 못했어요. 잠시 뒤 다시 눌러주세요.');render();return}
   Object.assign(LIVE,data.prices||{});
