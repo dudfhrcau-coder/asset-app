@@ -290,14 +290,15 @@ function news(){
   let h=`<h2><span>미국 주식 ${list.length}종목 소식</span><span>${asOf} 정리</span></h2>`;
   for(const g of list){const p=pct(g.val,g.cost),n=NEWS.items[g.symbol];
     h+=`<article class="ncard"><div class="ntop"><span class="name">${esc(g.name)}${g.symbol&&g.symbol!==g.name?`<span class="tag">${esc(g.symbol)}</span>`:''}</span><span class="num ${cls(p)}" style="font-size:12px"><span style="font-family:var(--sans)">내 수익률 </span>${sign(p)}${p.toFixed(2)}%</span></div>`;
+    if(n?.head)h+=`<div class="nhead"><i class="dot ${n.tone}"></i>${esc(n.head)}</div><ul class="nsum">${(n.sum||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
+    else h+=`<p class="hint" style="margin:0">최근 일주일 동안 새 기사가 없어요.</p>`;
     if(n){
-      h+=`<div class="nhead"><i class="dot ${n.tone}"></i>${esc(n.head)}</div><ul class="nsum">${n.sum.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
-      if(n.watch)h+=`<div class="nwatch"><span>지켜볼 점</span>${esc(n.watch)}</div>`;
-      const rec=[...n.news.map(x=>({...x,k:'기사'})),...n.vids.map(x=>({...x,k:'영상'}))];
+      if(n.watch&&n.head)h+=`<div class="nwatch"><span>지켜볼 점</span>${esc(n.watch)}</div>`;
+      const rec=(n.vids||[]).map(x=>({...x,k:'영상'}));
       if(rec.length)h+=`<div class="nrec">${rec.map(x=>`<a href="${esc(x.u)}" target="_blank" rel="noopener"><span class="kind ${x.k==='영상'?'yt':''}">${x.k}</span><span class="rt2">${esc(x.t)}</span><span class="d">${esc(x.d)}${x.c?' · '+esc(x.c):''}</span></a>`).join('')}</div>`;
-    }else h+=`<p class="hint" style="margin:0">아직 정리한 소식이 없어요. 다음 정리 때 추가돼요.</p>`;
+    }
     h+=`</article>`}
-  return `<div style="display:flex;flex-direction:column;gap:12px">${h}<p class="hint">기사와 영상을 읽고 요약했어요. 매수·매도 추천이 아니라 소식 정리예요. 영상은 최근 일주일 안에 올라온 것만 골랐어요.</p></div>`;
+  return `<div style="display:flex;flex-direction:column;gap:12px">${h}<p class="hint">최근 일주일 기사와 영상을 읽고 요약했어요. 매일 아침 7시쯤 새로 정리해요. 매수·매도 추천이 아니라 소식 정리예요.</p></div>`;
 }
 
 function deposits(){
