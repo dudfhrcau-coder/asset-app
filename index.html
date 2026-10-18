@@ -189,7 +189,7 @@ h2{font-size:13px;color:var(--muted);font-weight:600;margin:6px 2px 0;display:fl
 <script src="config.js"></script>
 <script>
 const KEY='asset-app';
-const APP_VER='10.19-1';
+const APP_VER='10.19-2';
 // 한 화면만 쓰는 앱이라 브라우저 잠금은 쓰지 않음. 새로고침할 때 이전 화면의 잠금이 남아 멈추는 문제를 피함
 const sb=supabase.createClient(window.APP_CONFIG.supabaseUrl,window.APP_CONFIG.supabaseAnonKey,{auth:{lock:(_n,_t,fn)=>fn()}});
 // S.items는 assets 테이블의 data 열. 현재가와 환율은 시세 서버에서 받아 화면에만 씀.
@@ -396,7 +396,22 @@ function simCalc(){
 function simResult(){const r=simCalc(),d=r.tot-r.now,pl=r.sv-r.sc;
   return `<div><div class="label">예상 총자산</div><div class="total num">${won(r.tot)}<small>원</small></div></div>
     <div class="pl">지금보다 <span class="num ${cls(d)}">${sign(d)}${won(d)}원 (${sign(d)}${pct(r.tot,r.now).toFixed(2)}%)</span></div>
-    <div class="pl">주식 원금 대비 <span class="num ${cls(pl)}">${sign(pl)}${won(pl)}원 (${sign(pl)}${pct(r.sv,r.sc).toFixed(2)}%)</span></div>`}
+    <div class="pl">주식 원금 대비 <span class="num ${cls(pl)}">${sign(pl)}${won(pl)}원 (${sign(pl)}${pct(r.sv,r.sc).toFixed(2)}%)</span></div>${simHomes(d)}`}
+/* 주가가 바뀌면 자산이 늘거나 줄어 살 수 있는 집값도 달라짐. 대출은 DSR 한도·LTV 70%·6억 중 작은 값, 부대비용 비율은 아침 계산값에서 역산 */
+function simBudget(region,dWon){const B=HOMES.budget,b=B?.[region];if(!b||B.assets==null)return null;
+  const k=(B.assets+b.loan_max)/b.price_max,A=B.assets+dWon/10000;let p=b.price_max;
+  for(let i=0;i<30;i++)p=Math.max(0,(A+Math.min(b.loan_max,p*0.7,60000))/k);
+  return Math.round(p)}
+function simHomes(d){const B=HOMES.budget;if(!B)return '';
+  const rg=[['gimpo','김포'],['gangseo','서울 강서구']].map(([r,n])=>({r,n,p:simBudget(r,d),now:B[r]?.price_max})).filter(x=>x.p!=null);
+  if(!rg.length)return '';
+  const hs=[...HOMES.watch.map(w=>({name:w.name,region:w.region,price:w.ask?.min})),HOMES.pick&&{name:HOMES.pick.name,region:HOMES.pick.region,price:HOMES.pick.price,pick:1}].filter(x=>x&&x.price);
+  const gap=x=>{const m=simBudget(x.region,d);if(m==null)return '';const g=m-x.price;
+    return `<span class="num ${g>=0?'':'up'}">${g>=0?eok(g)+' 여유':eok(-g)+' 부족'}</span>`};
+  return `<div class="label" style="margin-top:6px">살 수 있는 집값</div>
+    <div class="budget">${rg.map(x=>{const c=x.p-x.now;return `<div><span class="label">${x.n}</span><span class="big num">${eok(x.p)}</span><span class="hint num ${cls(c)}">${c?(c>0?"+":"-")+eok(Math.abs(c)):"변동 없음"}</span></div>`}).join('')}</div>
+    ${hs.length?`<div class="trades">${hs.map(x=>`<div><span>${x.pick?'추천 · ':''}${esc(x.name)}</span><span class="hint num">${eok(x.price)}</span>${gap(x)}</div>`).join('')}</div>`:''}
+    <div class="hint">주식을 팔아 집 사는 데 보탠다고 보고 계산했어요. 주식 양도세는 빼지 않았어요.</div>`}
 function simChg(g){const p=SIM.px[g.k]??g.price,c=pct(p,g.price),v=g.qty*p*(g.market==='US'?(SIM.fx??S.fx.usdkrw):1);
   return `<span class="${cls(c)}">${sign(c)}${c.toFixed(1)}%</span> · <span class="num">${short(v)}원</span>`}
 function sim(){
