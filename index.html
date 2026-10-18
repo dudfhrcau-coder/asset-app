@@ -189,7 +189,7 @@ h2{font-size:13px;color:var(--muted);font-weight:600;margin:6px 2px 0;display:fl
 <script src="config.js"></script>
 <script>
 const KEY='asset-app';
-const APP_VER='10.19-4';
+const APP_VER='10.19-5';
 // 한 화면만 쓰는 앱이라 브라우저 잠금은 쓰지 않음. 새로고침할 때 이전 화면의 잠금이 남아 멈추는 문제를 피함
 const sb=supabase.createClient(window.APP_CONFIG.supabaseUrl,window.APP_CONFIG.supabaseAnonKey,{auth:{lock:(_n,_t,fn)=>fn()}});
 // S.items는 assets 테이블의 data 열. 현재가와 환율은 시세 서버에서 받아 화면에만 씀.
@@ -310,16 +310,18 @@ function homes(){
   const b=H.budget;
   if(b)h+=`<section class="hcard"><div class="htop"><span class="hname">살 수 있는 집값</span><span class="hint">대출+자산</span></div>
     <div class="budget"><div><span class="label">김포</span><span class="big num">${eok(b.gimpo?.price_max)}</span><span class="hint">대출 ${eok(b.gimpo?.loan_max)}</span></div>
-    <div><span class="label">서울 강서구</span><span class="big num">${eok(b.gangseo?.price_max)}</span><span class="hint">대출 ${eok(b.gangseo?.loan_max)}</span></div></div>
+    <div><span class="label">서울(강서·양천·영등포)</span><span class="big num">${eok(b.gangseo?.price_max)}</span><span class="hint">대출 ${eok(b.gangseo?.loan_max)}</span></div></div>
     ${b.note?`<div class="hint">${esc(b.note)}</div>`:''}</section>`;
   for(const w of H.watch){const lo=w.ask?.min;
     h+=`<section class="hcard"><div class="htop"><span class="hname">${esc(w.name)} <span class="hint">${esc(w.type||'')}</span></span>${fit(w.region,lo)}</div>
+    ${w.station?`<div class="hint">🚉 ${esc(w.station)}</div>`:''}
     ${w.ask?`<div><span class="label">${esc(w.ask.label||'지금 매물 호가')}</span><div class="big num">${eok(w.ask.min)}${w.ask.max&&w.ask.max!==w.ask.min?' ~ '+eok(w.ask.max):''}</div>${w.ask.note?`<div class="hint">${esc(w.ask.note)}</div>`:''}</div>`:''}
     ${w.target?.length?`<div class="label">${esc(w.target_label||'원하는 동·층 매물')}</div><div class="trades">${w.target.map(t=>`<div><span>${esc(t.dong)}동</span><span class="hint">${esc(t.floor)}층</span><span class="p num">${eok(t.price)}</span></div>`).join('')}</div>`:(w.target_label?`<div class="hint">${esc(w.target_label)}: 지금 올라온 매물이 없어요</div>`:'')}
     ${trades(w.trades,w.molitOk)}${w.note?`<div class="hint">${esc(w.note)}</div>`:''}</section>`}
   const p=H.pick;
   if(p)h+=`<section class="hcard"><div class="htop"><span class="hname"><span class="tag2">오늘의 추천</span> ${esc(p.name)}</span>${fit(p.region,p.price)}</div>
     <div class="hint">${[p.area,p.households&&p.households.toLocaleString('ko-KR')+'세대',p.built&&p.built+'년',p.type].filter(Boolean).map(esc).join(' · ')}</div>
+    ${p.station?`<div class="hint">🚉 ${esc(p.station)}</div>`:''}
     <div><span class="label">시세</span> <span class="big num">${eok(p.price)}</span>${p.price_note?` <span class="hint">${esc(p.price_note)}</span>`:''}</div>
     ${p.why?.length?`<ul>${p.why.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''}${trades(p.trades,p.molitOk)}</section>`;
   return h;
@@ -408,7 +410,7 @@ function simBudget(region,dWon){const B=HOMES.budget,b=B?.[region];if(!b||B.asse
   for(let i=0;i<30;i++)p=Math.max(0,(A+Math.min(b.loan_max,p*0.7,60000))/k);
   return Math.round(p)}
 function simHomes(d){const B=HOMES.budget;if(!B)return '';
-  const rg=[['gimpo','김포'],['gangseo','서울 강서구']].map(([r,n])=>({r,n,p:simBudget(r,d),now:B[r]?.price_max})).filter(x=>x.p!=null);
+  const rg=[['gimpo','김포'],['gangseo','서울']].map(([r,n])=>({r,n,p:simBudget(r,d),now:B[r]?.price_max})).filter(x=>x.p!=null);
   if(!rg.length)return '';
   const hs=[...HOMES.watch.map(w=>({name:w.name,region:w.region,price:w.ask?.min})),HOMES.pick&&{name:HOMES.pick.name,region:HOMES.pick.region,price:HOMES.pick.price,pick:1}].filter(x=>x&&x.price);
   const gap=x=>{const m=simBudget(x.region,d);if(m==null)return '';const g=m-x.price;
