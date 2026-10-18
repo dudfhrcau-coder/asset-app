@@ -165,7 +165,8 @@ h2{font-size:13px;color:var(--muted);font-weight:600;margin:6px 2px 0;display:fl
 <script src="config.js"></script>
 <script>
 const KEY='asset-app';
-const sb=supabase.createClient(window.APP_CONFIG.supabaseUrl,window.APP_CONFIG.supabaseAnonKey);
+// 한 화면만 쓰는 앱이라 브라우저 잠금은 쓰지 않음. 새로고침할 때 이전 화면의 잠금이 남아 멈추는 문제를 피함
+const sb=supabase.createClient(window.APP_CONFIG.supabaseUrl,window.APP_CONFIG.supabaseAnonKey,{auth:{lock:(_n,_t,fn)=>fn()}});
 // S.items는 assets 테이블의 data 열. 현재가와 환율은 시세 서버에서 받아 화면에만 씀.
 let S={fx:{usdkrw:1350,at:null,src:'불러오는 중'},items:[]};
 let tab='home';
@@ -181,6 +182,7 @@ async function loadAssets(){
   const {data,error}=await sb.from('assets').select('id,data').order('updated_at');
   if(error){toast('자산을 불러오지 못했어요: '+error.message);return}
   S.items=data.map(r=>withLive({...r.data,id:r.id}));render();
+  try{localStorage.setItem(KEY+':assets',JSON.stringify(data))}catch(e){}
 }
 async function loadNews(){
   const {data,error}=await sb.from('news').select('symbol,data,as_of');
@@ -418,7 +420,7 @@ $('loginForm').addEventListener('submit',async e=>{
 async function start(session){
   const on=!!session;
   $('login').hidden=on;$('app').hidden=$('tabs').hidden=$('fab').hidden=!on;
-  if(!on){booted=false;if(chan){sb.removeChannel(chan);chan=null}return}
+  if(!on){booted=false;try{localStorage.removeItem(KEY+':assets')}catch(e){}if(chan){sb.removeChannel(chan);chan=null}return}
   if(booted)return;booted=true;
   // 가족 명단에 없는 계정은 데이터를 볼 수 없음(RLS)
   const {data:ok}=await sb.rpc('is_member');
@@ -429,6 +431,12 @@ async function start(session){
 }
 // 콜백 안에서 바로 Supabase를 부르면 로그인 잠금에 걸려 멈추므로 한 박자 늦춰 실행
 sb.auth.onAuthStateChange((_e,session)=>setTimeout(()=>start(session),0));
+// 로그인 확인을 기다리는 동안 빈 화면 대신 지난번에 받은 자산을 먼저 보여줌
+try{
+  const c=JSON.parse(localStorage.getItem(KEY+':assets'));
+  if(c&&$('login').hidden&&Object.keys(localStorage).some(k=>/^sb-.*-auth-token$/.test(k))){
+    S.items=c.map(r=>withLive({...r.data,id:r.id}));$('app').hidden=$('tabs').hidden=$('fab').hidden=false;render()}
+}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&booted){loadAssets();refresh(null,true)}});
 // 앱을 보고 있는 동안 1분마다 시세 갱신
 setInterval(()=>{if(document.visibilityState==='visible'&&booted)refresh(null,true)},60000);
