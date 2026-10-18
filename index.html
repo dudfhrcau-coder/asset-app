@@ -91,10 +91,6 @@ h2{font-size:13px;color:var(--muted);font-weight:600;margin:6px 2px 0;display:fl
 .nrow:first-child{border-top:0}
 .ntop{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
 .ntop .name{font-weight:600}
-.links{display:flex;flex-wrap:wrap;gap:6px}
-.chip{font-size:13px;font-weight:500;color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:6px 12px;text-decoration:none}
-.chip.yt{color:var(--up);background:transparent;border:1px solid var(--line)}
-.chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .cmp{display:flex;flex-direction:column;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}
 .cmp > div{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
 .cmp .num{font-size:15px;font-weight:600;text-align:right}
@@ -283,7 +279,6 @@ function stocks(){
 // 종목별 소식: Claude가 정리해 news 테이블에 넣음.
 let NEWS={asOf:null,items:{}};
 // 영문 회사 이름: 해외 뉴스 검색어로 씀. 없으면 티커로 검색.
-const EN={IONQ:'IonQ',RKLB:'Rocket Lab',SMR:'NuScale Power',TEM:'Tempus AI',BTQ:'BTQ Technologies',RDW:'Redwire',MBOT:'Microbot Medical',BOT:'RoboStrategy'};
 function news(){
   // 미국 주식만, 같은 종목은 하나로 합쳐 원금 큰 순서
   const m=new Map();
@@ -291,10 +286,6 @@ function news(){
     const g=m.get(k)||{name:i.name,symbol:i.symbol,cost:0,val:0};g.cost+=cost(i);g.val+=val(i);m.set(k,g)});
   const list=[...m.values()].sort((a,b)=>b.cost-a.cost);
   if(!list.length)return `<div class="group"><div class="empty">미국 주식을 추가하면 종목별 최신 소식 링크가 여기에 나와요.</div></div>`;
-  const q=encodeURIComponent;
-  const ko=g=>`https://news.google.com/search?q=${q(g.name+' 주가 when:7d')}&hl=ko&gl=KR&ceid=KR:ko`;
-  const en=g=>`https://news.google.com/search?q=${q((EN[g.symbol]?'"'+EN[g.symbol]+'"':g.symbol)+' stock when:7d')}&hl=en-US&gl=US&ceid=US:en`;
-  const yt=g=>`https://www.youtube.com/results?search_query=${q(g.name+' 주가')}&sp=CAI%253D`;
   const asOf=NEWS.asOf.replace(/^\d{4}-0?(\d+)-0?(\d+)$/,'$1월 $2일');
   let h=`<h2><span>미국 주식 ${list.length}종목 소식</span><span>${asOf} 정리</span></h2>`;
   for(const g of list){const p=pct(g.val,g.cost),n=NEWS.items[g.symbol];
@@ -305,8 +296,8 @@ function news(){
       const rec=[...n.news.map(x=>({...x,k:'기사'})),...n.vids.map(x=>({...x,k:'영상'}))];
       if(rec.length)h+=`<div class="nrec">${rec.map(x=>`<a href="${esc(x.u)}" target="_blank" rel="noopener"><span class="kind ${x.k==='영상'?'yt':''}">${x.k}</span><span class="rt2">${esc(x.t)}</span><span class="d">${esc(x.d)}${x.c?' · '+esc(x.c):''}</span></a>`).join('')}</div>`;
     }else h+=`<p class="hint" style="margin:0">아직 정리한 소식이 없어요. 다음 정리 때 추가돼요.</p>`;
-    h+=`<div class="links"><a class="chip" href="${ko(g)}" target="_blank" rel="noopener">국내 뉴스 더 보기</a><a class="chip" href="${en(g)}" target="_blank" rel="noopener">해외 뉴스</a><a class="chip yt" href="${yt(g)}" target="_blank" rel="noopener">유튜브 최신</a></div></article>`}
-  return `<div style="display:flex;flex-direction:column;gap:12px">${h}<p class="hint">기사와 영상을 읽고 요약했어요. 매수·매도 추천이 아니라 소식 정리예요. 영상은 최근 것이 드물어 올라온 날짜를 함께 적었어요.</p></div>`;
+    h+=`</article>`}
+  return `<div style="display:flex;flex-direction:column;gap:12px">${h}<p class="hint">기사와 영상을 읽고 요약했어요. 매수·매도 추천이 아니라 소식 정리예요. 영상은 최근 일주일 안에 올라온 것만 골랐어요.</p></div>`;
 }
 
 function deposits(){
