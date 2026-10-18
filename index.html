@@ -189,7 +189,7 @@ h2{font-size:13px;color:var(--muted);font-weight:600;margin:6px 2px 0;display:fl
 <script src="config.js"></script>
 <script>
 const KEY='asset-app';
-const APP_VER='10.19-5';
+const APP_VER='10.19-6';
 // 한 화면만 쓰는 앱이라 브라우저 잠금은 쓰지 않음. 새로고침할 때 이전 화면의 잠금이 남아 멈추는 문제를 피함
 const sb=supabase.createClient(window.APP_CONFIG.supabaseUrl,window.APP_CONFIG.supabaseAnonKey,{auth:{lock:(_n,_t,fn)=>fn()}});
 // S.items는 assets 테이블의 data 열. 현재가와 환율은 시세 서버에서 받아 화면에만 씀.
@@ -319,11 +319,12 @@ function homes(){
     ${w.target?.length?`<div class="label">${esc(w.target_label||'원하는 동·층 매물')}</div><div class="trades">${w.target.map(t=>`<div><span>${esc(t.dong)}동</span><span class="hint">${esc(t.floor)}층</span><span class="p num">${eok(t.price)}</span></div>`).join('')}</div>`:(w.target_label?`<div class="hint">${esc(w.target_label)}: 지금 올라온 매물이 없어요</div>`:'')}
     ${trades(w.trades,w.molitOk)}${w.note?`<div class="hint">${esc(w.note)}</div>`:''}</section>`}
   const p=H.pick;
-  if(p)h+=`<section class="hcard"><div class="htop"><span class="hname"><span class="tag2">오늘의 추천</span> ${esc(p.name)}</span>${fit(p.region,p.price)}</div>
+  if(p)h+=`<section class="hcard"><div class="htop"><span class="hname"><span class="tag2">${p.stretch?'목표 범위 추천':'오늘의 추천'}</span> ${esc(p.name)}</span>${fit(p.region,p.price)}</div>
     <div class="hint">${[p.area,p.households&&p.households.toLocaleString('ko-KR')+'세대',p.built&&p.built+'년',p.type].filter(Boolean).map(esc).join(' · ')}</div>
     ${p.station?`<div class="hint">🚉 ${esc(p.station)}</div>`:''}
     <div><span class="label">시세</span> <span class="big num">${eok(p.price)}</span>${p.price_note?` <span class="hint">${esc(p.price_note)}</span>`:''}</div>
-    ${p.why?.length?`<ul>${p.why.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''}${trades(p.trades,p.molitOk)}</section>`;
+    ${p.why?.length?`<ul>${p.why.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''}
+    ${p.good?.length?`<div class="label">호재</div><ul>${p.good.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''}${trades(p.trades,p.molitOk)}</section>`;
   return h;
 }
 function groupBy(arr){const m=new Map();arr.forEach(i=>{if(!m.has(i.inst))m.set(i.inst,[]);m.get(i.inst).push(i)});return m}
