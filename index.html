@@ -189,7 +189,7 @@ h2{font-size:13px;color:var(--muted);font-weight:600;margin:6px 2px 0;display:fl
 <script src="config.js"></script>
 <script>
 const KEY='asset-app';
-const APP_VER='10.19-7';
+const APP_VER='10.19-8';
 // 한 화면만 쓰는 앱이라 브라우저 잠금은 쓰지 않음. 새로고침할 때 이전 화면의 잠금이 남아 멈추는 문제를 피함
 const sb=supabase.createClient(window.APP_CONFIG.supabaseUrl,window.APP_CONFIG.supabaseAnonKey,{auth:{lock:(_n,_t,fn)=>fn()}});
 // S.items는 assets 테이블의 data 열. 현재가와 환율은 시세 서버에서 받아 화면에만 씀.
@@ -534,7 +534,7 @@ async function refresh(btn,quiet){
   S.items=S.items.map(withLive);
   try{localStorage.setItem(KEY+':quotes',JSON.stringify({prices:LIVE,sessions:SESS,usdkrw:S.fx.usdkrw,at:S.fx.at}))}catch(e){}
   render();
-  if(!quiet){const miss=symbols.filter(x=>!(x in (data.prices||{})));toast(miss.length?'일부 종목 시세를 못 가져왔어요: '+miss.join(', '):'시세를 새로 가져왔어요')}
+  if(!quiet){const P=data.prices||{},miss=[...new Set(S.items.filter(i=>i.kind==='stock'&&i.symbol&&!qsyms(i).some(x=>x in P)).map(i=>i.name))];toast(miss.length?'일부 종목 시세를 못 가져왔어요: '+miss.join(', '):'시세를 새로 가져왔어요')}
 }
 
 /* ---------- 공통 ---------- */
