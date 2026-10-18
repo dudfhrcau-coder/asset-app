@@ -11,8 +11,9 @@ const TTL_MS = 60 * 1000;
 const FX = "KRW=X";
 
 type Quote = { price: number; session: string | null };
+const WRONG = "wrong"; // 시장이 안 맞는 심볼(코스닥 종목의 .KS 등)
 
-async function yahoo(symbol: string): Promise<Quote | null> {
+async function yahoo(symbol: string): Promise<Quote | typeof WRONG | null> {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1m&includePrePost=true`;
   try {
     const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
@@ -22,6 +23,11 @@ async function yahoo(symbol: string): Promise<Quote | null> {
     const meta = res?.meta;
     const p = meta?.regularMarketPrice;
     if (typeof p !== "number") return null;
+    // 코스닥 종목을 .KS로 물으면 Yahoo가 엉뚱한 옛 가격(펀드로 분류된 항목)을 줘요. 시장이 안 맞는 응답은 버려요.
+    const ex = String(meta?.fullExchangeName ?? "");
+    if (symbol.endsWith(".KS") && ex === "KOSDAQ") return WRONG;
+    if (symbol.endsWith(".KQ") && ex !== "KOSDAQ") return WRONG;
+    if (meta?.instrumentType === "MUTUALFUND") return WRONG;
     // 정규장 밖에서 체결된 마지막 1분봉이 있으면 그 가격을 씀
     const reg = meta?.currentTradingPeriod?.regular;
     const ts: number[] = res?.timestamp ?? [];
@@ -60,11 +66,13 @@ Deno.serve(async (req) => {
 
   const stale = wanted.filter((s) => !fresh.has(s));
   const got = await Promise.all(stale.map(async (s) => [s, await yahoo(s)] as const));
-  const rows = got.filter(([, q]) => q !== null).map(([symbol, q]) => ({ symbol, price: q!.price, session: q!.session, fetched_at: new Date().toISOString() }));
+  const wrong = got.filter(([, q]) => q === WRONG).map(([s]) => s);
+  if (wrong.length) await admin.from("quotes").delete().in("symbol", wrong);
+  const rows = got.flatMap(([symbol, q]) => (q && q !== WRONG ? [{ symbol, price: q.price, session: q.session, fetched_at: new Date().toISOString() }] : []));
   if (rows.length) await admin.from("quotes").upsert(rows);
   for (const r of rows) fresh.set(r.symbol, { price: r.price, session: r.session });
   // Yahoo가 실패하면 마지막으로 받은 값이라도 돌려줌
-  for (const q of cached ?? []) if (!fresh.has(q.symbol)) fresh.set(q.symbol, { price: Number(q.price), session: q.session });
+  for (const q of cached ?? []) if (!fresh.has(q.symbol) && !wrong.includes(q.symbol)) fresh.set(q.symbol, { price: Number(q.price), session: q.session });
 
   const usdkrw = fresh.get(FX)?.price ?? null;
   fresh.delete(FX);
