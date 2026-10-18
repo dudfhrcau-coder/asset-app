@@ -165,6 +165,7 @@ h2{font-size:13px;color:var(--muted);font-weight:600;margin:6px 2px 0;display:fl
 <script src="config.js"></script>
 <script>
 const KEY='asset-app';
+const APP_VER='10.18-7';
 // 한 화면만 쓰는 앱이라 브라우저 잠금은 쓰지 않음. 새로고침할 때 이전 화면의 잠금이 남아 멈추는 문제를 피함
 const sb=supabase.createClient(window.APP_CONFIG.supabaseUrl,window.APP_CONFIG.supabaseAnonKey,{auth:{lock:(_n,_t,fn)=>fn()}});
 // S.items는 assets 테이블의 data 열. 현재가와 환율은 시세 서버에서 받아 화면에만 씀.
@@ -246,6 +247,7 @@ function home(){
     <div><div class="label">원/달러 환율</div><div class="num">${S.fx.usdkrw.toLocaleString('ko-KR',{minimumFractionDigits:1,maximumFractionDigits:2})}원</div><div class="meta">${S.fx.at?when(S.fx.at)+' · '+esc(S.fx.src):esc(S.fx.src)}</div></div>
     <button class="btn primary" type="button" id="refresh">시세 새로고침</button>
   </section>
+  <p class="hint" style="text-align:center">앱 버전 ${APP_VER}</p>
   </div>`;
 }
 
@@ -440,7 +442,7 @@ try{
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&booted){loadAssets();refresh(null,true)}});
 // 앱을 보고 있는 동안 1분마다 시세 갱신
 setInterval(()=>{if(document.visibilityState==='visible'&&booted)refresh(null,true)},60000);
-if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js',{updateViaCache:'none'});
 </script>
 </body>
 </html>
