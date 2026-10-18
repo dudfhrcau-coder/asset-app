@@ -305,7 +305,7 @@ function homes(){
     ${b.note?`<div class="hint">${esc(b.note)}</div>`:''}</section>`;
   for(const w of H.watch){const lo=w.ask?.min;
     h+=`<section class="hcard"><div class="htop"><span class="hname">${esc(w.name)} <span class="hint">${esc(w.type||'')}</span></span>${fit(w.region,lo)}</div>
-    ${w.ask?`<div><span class="label">지금 매물 호가</span><div class="big num">${eok(w.ask.min)}${w.ask.max&&w.ask.max!==w.ask.min?' ~ '+eok(w.ask.max):''}</div>${w.ask.note?`<div class="hint">${esc(w.ask.note)}</div>`:''}</div>`:''}
+    ${w.ask?`<div><span class="label">${esc(w.ask.label||'지금 매물 호가')}</span><div class="big num">${eok(w.ask.min)}${w.ask.max&&w.ask.max!==w.ask.min?' ~ '+eok(w.ask.max):''}</div>${w.ask.note?`<div class="hint">${esc(w.ask.note)}</div>`:''}</div>`:''}
     ${w.target?.length?`<div class="label">${esc(w.target_label||'원하는 동·층 매물')}</div><div class="trades">${w.target.map(t=>`<div><span>${esc(t.dong)}동</span><span class="hint">${esc(t.floor)}층</span><span class="p num">${eok(t.price)}</span></div>`).join('')}</div>`:(w.target_label?`<div class="hint">${esc(w.target_label)}: 지금 올라온 매물이 없어요</div>`:'')}
     ${trades(w.trades)}${w.note?`<div class="hint">${esc(w.note)}</div>`:''}</section>`}
   const p=H.pick;
