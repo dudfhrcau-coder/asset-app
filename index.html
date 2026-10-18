@@ -175,10 +175,11 @@ let S={fx:{usdkrw:1350,at:null,src:'불러오는 중'},items:[]};
 let tab='home';
 try{tab=localStorage.getItem(KEY+':tab')||'home'}catch(e){}
 const LIVE={};// symbol -> 현재가
-try{const c=JSON.parse(localStorage.getItem(KEY+':quotes'));if(c){Object.assign(LIVE,c.prices||{});if(c.usdkrw)S.fx={usdkrw:c.usdkrw,at:c.at,src:'지난 시세'}}}catch(e){}
+const SESS={};// symbol -> 'pre' | 'post' (장전·장후 가격일 때)
+try{const c=JSON.parse(localStorage.getItem(KEY+':quotes'));if(c){Object.assign(LIVE,c.prices||{});Object.assign(SESS,c.sessions||{});if(c.usdkrw)S.fx={usdkrw:c.usdkrw,at:c.at,src:'지난 시세'}}}catch(e){}
 // 국내 종목은 코스피(.KS)와 코스닥(.KQ)을 둘 다 물어보고 값이 온 쪽을 씀
 const qsyms=i=>i.market==='KR'?[i.symbol+'.KS',i.symbol+'.KQ']:[i.symbol];
-function withLive(it){if(it.kind!=='stock')return it;const p=qsyms(it).map(s=>LIVE[s]).find(Boolean);return p?{...it,price:p}:it}
+function withLive(it){if(it.kind!=='stock')return it;const s=qsyms(it).find(s=>LIVE[s]);return s?{...it,price:LIVE[s],session:SESS[s]||''}:it}
 
 async function loadAssets(){
   const {data,error}=await sb.from('assets').select('id,data').order('updated_at');
@@ -192,7 +193,7 @@ async function loadNews(){
   if(tab==='news')render();
 }
 async function saveItem(it){
-  const {id,...data}=it;delete data.price;
+  const {id,...data}=it;delete data.price;delete data.session;
   if(it.kind==='stock')data.price=it.price;// 시세를 못 받는 종목을 위해 마지막 값 보관
   const {error}=await sb.from('assets').upsert({id,data});
   if(error){toast('저장하지 못했어요: '+error.message);return false}return true;
@@ -215,7 +216,8 @@ const sum=(arr,f=val)=>arr.reduce((a,i)=>a+f(i),0);
 const pct=(a,b)=>b?((a-b)/b*100):0;
 const cls=n=>n>0?'up':n<0?'down':'';
 const sign=n=>n>0?'+':'';
-function price(it){const us=it.market==='US';return us?'$'+it.price.toLocaleString('en-US',{maximumFractionDigits:2}):won(it.price)+'원'}
+const SESS_LABEL={pre:'장전',post:'장후'};
+function price(it){const us=it.market==='US';return (us?'$'+it.price.toLocaleString('en-US',{maximumFractionDigits:2}):won(it.price)+'원')+(SESS_LABEL[it.session]?' ('+SESS_LABEL[it.session]+')':'')}
 function avg(it){const us=it.market==='US';return us?'$'+it.avg.toLocaleString('en-US',{maximumFractionDigits:2}):won(it.avg)+'원'}
 function when(t){if(!t)return'';const d=new Date(t);return d.toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})+' 기준'}
 
@@ -387,10 +389,10 @@ async function refresh(btn,quiet){
   const symbols=[...new Set(S.items.filter(i=>i.kind==='stock'&&i.symbol).flatMap(qsyms))];
   const {data,error}=await sb.functions.invoke('quotes',{body:{symbols}});
   if(error||!data){if(!quiet)toast('시세를 가져오지 못했어요. 잠시 뒤 다시 눌러주세요.');render();return}
-  Object.assign(LIVE,data.prices||{});
+  Object.assign(LIVE,data.prices||{});for(const k in SESS)delete SESS[k];Object.assign(SESS,data.sessions||{});
   if(data.usdkrw)S.fx={usdkrw:data.usdkrw,at:data.at||Date.now(),src:'Yahoo Finance'};
   S.items=S.items.map(withLive);
-  try{localStorage.setItem(KEY+':quotes',JSON.stringify({prices:LIVE,usdkrw:S.fx.usdkrw,at:S.fx.at}))}catch(e){}
+  try{localStorage.setItem(KEY+':quotes',JSON.stringify({prices:LIVE,sessions:SESS,usdkrw:S.fx.usdkrw,at:S.fx.at}))}catch(e){}
   render();
   if(!quiet){const miss=symbols.filter(x=>!(x in (data.prices||{})));toast(miss.length?'일부 종목 시세를 못 가져왔어요: '+miss.join(', '):'시세를 새로 가져왔어요')}
 }
@@ -436,6 +438,8 @@ async function start(session){
 // 콜백 안에서 바로 Supabase를 부르면 로그인 잠금에 걸려 멈추므로 한 박자 늦춰 실행
 sb.auth.onAuthStateChange((_e,session)=>setTimeout(()=>start(session),0));
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&booted){loadAssets();refresh(null,true)}});
+// 앱을 보고 있는 동안 1분마다 시세 갱신
+setInterval(()=>{if(document.visibilityState==='visible'&&booted)refresh(null,true)},60000);
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
 </script>
 </body>

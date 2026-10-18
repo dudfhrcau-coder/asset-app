@@ -4,7 +4,7 @@
 
 - 화면: 정적 파일(`index.html`, `sw.js`, `manifest.webmanifest`, `icons/`). GitHub Pages로 올려요.
 - 데이터: Supabase. 로그인(이메일+비밀번호), 자산 공유, 실시간 반영.
-- 시세: Supabase Edge Function `quotes`가 Yahoo Finance에서 주가와 원/달러 환율을 받아 10분 캐시.
+- 시세: Supabase Edge Function `quotes`가 Yahoo Finance에서 주가와 원/달러 환율을 받아 1분 캐시. 미국 주식은 장전·장후 가격도 반영하고, 앱을 보는 동안 1분마다 자동 갱신.
 - 소식: `news` 테이블. Claude가 매일 아침 요약해서 갱신.
 
 ## 처음 설정

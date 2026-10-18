@@ -30,6 +30,7 @@ create table if not exists public.news (
 create table if not exists public.quotes (
   symbol text primary key,
   price numeric not null,
+  session text, -- 장전·장후 가격이면 pre/post
   fetched_at timestamptz not null default now()
 );
 
