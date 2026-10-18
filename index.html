@@ -124,6 +124,18 @@ h2{font-size:13px;color:var(--muted);font-weight:600;margin:6px 2px 0;display:fl
 .actions .right{display:flex;gap:8px;margin-left:auto}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(140px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);font-size:13px;padding:10px 14px;border-radius:10px;z-index:20;max-width:88%;text-align:center}
 .hint{font-size:12px;color:var(--muted)}
+.simopen{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);color:inherit;font:inherit;text-align:left;cursor:pointer;width:100%}
+.simopen b{font-size:15px}
+.simbar{display:flex;align-items:center;gap:8px}
+.simbar h2{margin:0;font-size:17px;color:var(--ink)}
+.pcts{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+.pcts .btn{flex:none}
+.simrow{display:grid;grid-template-columns:1fr 128px;gap:4px 10px;align-items:center;padding:12px 14px;border-top:1px solid var(--line)}
+.simrow:first-child{border-top:0}
+.simrow .name{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.simrow input{font:16px var(--mono);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 10px;width:100%;text-align:right}
+.simrow .sub{font-size:12px;color:var(--muted)}
+.simrow .chg{font-size:12px;text-align:right}
 @media (prefers-reduced-motion:no-preference){.sheet{animation:up .22s ease-out}@keyframes up{from{transform:translateY(30px);opacity:.6}}}
 </style>
 </head>
@@ -165,7 +177,7 @@ h2{font-size:13px;color:var(--muted);font-weight:600;margin:6px 2px 0;display:fl
 <script src="config.js"></script>
 <script>
 const KEY='asset-app';
-const APP_VER='10.18-7';
+const APP_VER='10.18-8';
 // 한 화면만 쓰는 앱이라 브라우저 잠금은 쓰지 않음. 새로고침할 때 이전 화면의 잠금이 남아 멈추는 문제를 피함
 const sb=supabase.createClient(window.APP_CONFIG.supabaseUrl,window.APP_CONFIG.supabaseAnonKey,{auth:{lock:(_n,_t,fn)=>fn()}});
 // S.items는 assets 테이블의 data 열. 현재가와 환율은 시세 서버에서 받아 화면에만 씀.
@@ -222,8 +234,11 @@ function when(t){if(!t)return'';const d=new Date(t);return d.toLocaleString('ko-
 
 function render(){
   document.querySelectorAll('.tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===tab));
+  // 시뮬레이션 숫자를 입력하는 중에는 화면을 다시 그리지 않고 결과만 갱신(입력칸 유지)
+  if(tab==='sim'&&document.activeElement?.matches('[data-sim],[data-simfx]')){simRefresh();return}
   const v=document.getElementById('view');
-  v.innerHTML=tab==='home'?home():tab==='stock'?stocks():tab==='news'?news():deposits();
+  v.innerHTML=tab==='home'?home():tab==='stock'?stocks():tab==='news'?news():tab==='sim'?sim():deposits();
+  document.getElementById('fab').hidden=tab==='sim'||document.getElementById('app').hidden;
 }
 
 function home(){
@@ -247,6 +262,7 @@ function home(){
     <div><div class="label">원/달러 환율</div><div class="num">${S.fx.usdkrw.toLocaleString('ko-KR',{minimumFractionDigits:1,maximumFractionDigits:2})}원</div><div class="meta">${S.fx.at?when(S.fx.at)+' · '+esc(S.fx.src):esc(S.fx.src)}</div></div>
     <button class="btn primary" type="button" id="refresh">시세 새로고침</button>
   </section>
+  <button class="simopen" type="button" id="openSim"><span><b>가격 시뮬레이션</b><br><span class="hint">주가가 바뀌면 총자산이 얼마가 되는지 계산해요</span></span><span aria-hidden="true">›</span></button>
   <p class="hint" style="text-align:center">앱 버전 ${APP_VER}</p>
   </div>`;
 }
@@ -304,6 +320,53 @@ function news(){
     h+=`</article>`}
   return `<div style="display:flex;flex-direction:column;gap:12px">${h}<p class="hint">최근 일주일 기사와 영상을 읽고 요약했어요. 매일 아침 7시쯤 새로 정리해요. 매수·매도 추천이 아니라 소식 정리예요.</p></div>`;
 }
+
+/* ---------- 가격 시뮬레이션 (저장하지 않고 화면에서만 계산) ---------- */
+const SIM={fx:null,px:{}};
+function simGroups(){
+  const m=new Map();
+  S.items.filter(i=>i.kind==='stock').forEach(i=>{const k=i.market+':'+(i.symbol||i.name);
+    const g=m.get(k)||{k,name:i.name,market:i.market,qty:0,cost:0,price:i.price};g.qty+=i.qty;g.cost+=cost(i);m.set(k,g)});
+  return [...m.values()].sort((a,b)=>b.cost-a.cost);
+}
+function simCalc(){
+  const fx=SIM.fx??S.fx.usdkrw,gs=simGroups();
+  const dep=S.items.filter(i=>i.kind==='deposit').reduce((a,i)=>a+i.amount*(i.cur==='USD'?fx:1),0);
+  let sv=0,sc=0;for(const g of gs){const p=SIM.px[g.k]??g.price;sv+=g.qty*p*(g.market==='US'?fx:1);sc+=g.cost}
+  return {tot:dep+sv,sv,sc,now:sum(S.items)};
+}
+function simResult(){const r=simCalc(),d=r.tot-r.now,pl=r.sv-r.sc;
+  return `<div><div class="label">예상 총자산</div><div class="total num">${won(r.tot)}<small>원</small></div></div>
+    <div class="pl">지금보다 <span class="num ${cls(d)}">${sign(d)}${won(d)}원 (${sign(d)}${pct(r.tot,r.now).toFixed(2)}%)</span></div>
+    <div class="pl">주식 원금 대비 <span class="num ${cls(pl)}">${sign(pl)}${won(pl)}원 (${sign(pl)}${pct(r.sv,r.sc).toFixed(2)}%)</span></div>`}
+function simChg(g){const p=SIM.px[g.k]??g.price,c=pct(p,g.price),v=g.qty*p*(g.market==='US'?(SIM.fx??S.fx.usdkrw):1);
+  return `<span class="${cls(c)}">${sign(c)}${c.toFixed(1)}%</span> · <span class="num">${short(v)}원</span>`}
+function sim(){
+  const gs=simGroups(),fx=SIM.fx??S.fx.usdkrw;
+  if(!gs.length)return `<div class="simbar"><button class="btn" type="button" id="simBack">‹ 돌아가기</button></div><div class="group"><div class="empty">주식을 추가하면 시뮬레이션할 수 있어요.</div></div>`;
+  const cur=g=>g.market==='US'?'$'+g.price.toLocaleString('en-US',{maximumFractionDigits:2}):won(g.price)+'원';
+  return `<div style="display:flex;flex-direction:column;gap:14px">
+  <div class="simbar"><button class="btn" type="button" id="simBack">‹ 돌아가기</button><h2>가격 시뮬레이션</h2></div>
+  <section class="hero" id="simResult">${simResult()}</section>
+  <div><div class="label" style="margin:0 2px 6px">모든 종목을 현재가 대비 한 번에</div>
+  <div class="pcts">${[-50,-30,-10,0,10,30,50,100].map(p=>`<button class="btn" type="button" data-pct="${p}">${p?sign(p)+p+'%':'현재가'}</button>`).join('')}</div></div>
+  <div class="group">
+    <div class="simrow"><span><span class="name">원/달러 환율</span><br><span class="sub">현재 ${S.fx.usdkrw.toLocaleString('ko-KR',{maximumFractionDigits:1})}원</span></span>
+      <input inputmode="decimal" type="number" step="any" data-simfx value="${+fx.toFixed(1)}" aria-label="환율"></div>
+    ${gs.map(g=>`<div class="simrow"><span><span class="name">${esc(g.name)}</span><br><span class="sub">${g.qty.toLocaleString('ko-KR')}주 · 현재 ${cur(g)}</span></span>
+      <input inputmode="decimal" type="number" step="any" data-sim="${esc(g.k)}" value="${+(SIM.px[g.k]??g.price).toFixed(g.market==='US'?2:0)}" aria-label="${esc(g.name)} 가격">
+      <span></span><span class="chg" data-chg="${esc(g.k)}">${simChg(g)}</span></div>`).join('')}
+  </div>
+  <p class="hint">${'미국 주식은 달러, 국내 주식은 원으로 가격을 넣어요. 저장되지 않고 계산만 해요.'}</p>
+  </div>`;
+}
+function simRefresh(){document.getElementById('simResult').innerHTML=simResult();
+  for(const g of simGroups()){const el=document.querySelector(`[data-chg="${CSS.escape(g.k)}"]`);if(el)el.innerHTML=simChg(g)}}
+document.addEventListener('input',e=>{
+  const t=e.target;if(!t.matches('[data-sim],[data-simfx]'))return;const n=parseFloat(t.value);
+  if(t.dataset.simfx!==undefined)SIM.fx=isNaN(n)?null:n;else{if(isNaN(n))delete SIM.px[t.dataset.sim];else SIM.px[t.dataset.sim]=n}
+  simRefresh();
+});
 
 function deposits(){
   const dp=mine().filter(i=>i.kind==='deposit');
@@ -399,6 +462,9 @@ document.addEventListener('click',e=>{
   const t=e.target.closest('.tabs button');if(t){tab=t.dataset.tab;try{localStorage.setItem(KEY+':tab',tab)}catch(_){}render();window.scrollTo(0,0);return}
   const r=e.target.closest('.row');if(r){openSheet(S.items.find(i=>i.id===r.dataset.id));return}
   if(e.target.id==='refresh')refresh(e.target);
+  if(e.target.closest('#openSim')){tab='sim';render();window.scrollTo(0,0);return}
+  if(e.target.id==='simBack'){tab='home';render();window.scrollTo(0,0);return}
+  const pb=e.target.closest('[data-pct]');if(pb){const f=1+pb.dataset.pct/100;SIM.px={};if(f!==1)simGroups().forEach(g=>SIM.px[g.k]=g.price*f);render();return}
   if(e.target.id==='logout')sb.auth.signOut();
 });
 document.getElementById('fab').addEventListener('click',()=>{draftKind=tab==='deposit'?'deposit':'stock';openSheet(null)});
