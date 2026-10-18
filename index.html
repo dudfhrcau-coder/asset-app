@@ -189,7 +189,7 @@ h2{font-size:13px;color:var(--muted);font-weight:600;margin:6px 2px 0;display:fl
 <script src="config.js"></script>
 <script>
 const KEY='asset-app';
-const APP_VER='10.19-3';
+const APP_VER='10.19-4';
 // 한 화면만 쓰는 앱이라 브라우저 잠금은 쓰지 않음. 새로고침할 때 이전 화면의 잠금이 남아 멈추는 문제를 피함
 const sb=supabase.createClient(window.APP_CONFIG.supabaseUrl,window.APP_CONFIG.supabaseAnonKey,{auth:{lock:(_n,_t,fn)=>fn()}});
 // S.items는 assets 테이블의 data 열. 현재가와 환율은 시세 서버에서 받아 화면에만 씀.
@@ -392,8 +392,8 @@ function simCalc(){
   const dep=S.items.filter(i=>i.kind==='deposit').reduce((a,i)=>a+i.amount*(i.cur==='USD'?fx:1),0);
   let sv=0,sc=0,usG=0,krV=0;for(const g of gs){const p=SIM.px[g.k]??g.price,v=g.qty*p*(g.market==='US'?fx:1);sv+=v;sc+=g.cost;
     if(g.market==='US')usG+=v-g.cost;else krV+=v}
-  // 다 판다고 가정: 해외주식 양도세 22%(지방세 포함, 손익 통산 후 연 250만원 공제), 국내주식은 소액주주라 양도세 없이 거래세 0.2%
-  const usTax=Math.max(0,usG-2500000)*0.22,krTax=krV*0.002,tax=usTax+krTax;
+  // 다 판다고 가정: 해외주식 양도세 22%(지방세 포함, 부부 계좌가 따로 있어 연 250만원씩 2명, 합쳐 500만원 공제), 국내주식은 소액주주라 양도세 없이 거래세 0.2%
+  const usTax=Math.max(0,usG-5000000)*0.22,krTax=krV*0.002,tax=usTax+krTax;
   return {tot:dep+sv,sv,sc,now:sum(S.items),usTax,krTax,tax,net:dep+sv-tax};
 }
 function simResult(){const r=simCalc(),d=r.tot-r.now,pl=r.sv-r.sc;
@@ -416,7 +416,7 @@ function simHomes(d){const B=HOMES.budget;if(!B)return '';
   return `<div class="label" style="margin-top:6px">살 수 있는 집값</div>
     <div class="budget">${rg.map(x=>{const c=x.p-x.now;return `<div><span class="label">${x.n}</span><span class="big num">${eok(x.p)}</span><span class="hint num ${cls(c)}">${c?(c>0?"+":"-")+eok(Math.abs(c)):"변동 없음"}</span></div>`}).join('')}</div>
     ${hs.length?`<div class="trades">${hs.map(x=>`<div><span>${x.pick?'추천 · ':''}${esc(x.name)}</span><span class="hint num">${eok(x.price)}</span>${gap(x)}</div>`).join('')}</div>`:''}
-    <div class="hint">주식을 다 팔고 세금을 낸 뒤 남는 돈을 집 사는 데 보탠다고 보고 계산했어요. 해외주식 양도세는 한 사람 명의, 연 250만원 공제로 계산해요.</div>`}
+    <div class="hint">주식을 다 팔고 세금을 낸 뒤 남는 돈을 집 사는 데 보탠다고 보고 계산했어요. 해외주식 양도세는 두 사람 공제(250만원씩)를 합쳐 계산해요.</div>`}
 function simChg(g){const p=SIM.px[g.k]??g.price,c=pct(p,g.price),v=g.qty*p*(g.market==='US'?(SIM.fx??S.fx.usdkrw):1);
   return `<span class="${cls(c)}">${sign(c)}${c.toFixed(1)}%</span> · <span class="num">${short(v)}원</span>`}
 function sim(){
