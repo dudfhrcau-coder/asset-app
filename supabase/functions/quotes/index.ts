@@ -1,6 +1,7 @@
 // 시세 서버: 로그인한 가족만 호출. 주가와 원/달러 환율을 Yahoo Finance에서 받아 1분 동안 캐시해요.
 // 미국 주식은 장전·장후 거래 가격도 반영하고, 그 경우 session에 'pre' 또는 'post'를 붙여요.
 // 국내 종목은 005930.KS 형식, 미국 종목은 IONQ 형식으로 받아요.
+// 국내 종목은 Yahoo가 20분쯤 늦어서 네이버 증권 실시간 시세를 먼저 쓰고, 실패하면 Yahoo로 받아요.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const cors = {
@@ -44,6 +45,24 @@ async function yahoo(symbol: string): Promise<Quote | typeof WRONG | null> {
   }
 }
 
+async function naver(symbol: string): Promise<Quote | typeof WRONG | null> {
+  const [code, suffix] = symbol.split(".");
+  try {
+    const r = await fetch(`https://polling.finance.naver.com/api/realtime/domestic/stock/${code}`, { headers: { "User-Agent": "Mozilla/5.0" } });
+    if (!r.ok) return null;
+    const d = (await r.json())?.datas?.[0];
+    const price = Number(d?.closePriceRaw);
+    if (!price) return null;
+    const ex = d?.stockExchangeType?.code;
+    if (ex && ex !== suffix) return WRONG;
+    return { price, session: null };
+  } catch {
+    return null;
+  }
+}
+
+const quote = async (s: string) => (/\.K[SQ]$/.test(s) ? (await naver(s)) ?? (await yahoo(s)) : await yahoo(s));
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   const json = (body: unknown, status = 200) =>
@@ -65,7 +84,7 @@ Deno.serve(async (req) => {
   for (const q of cached ?? []) if (Date.now() - new Date(q.fetched_at).getTime() < TTL_MS) fresh.set(q.symbol, { price: Number(q.price), session: q.session });
 
   const stale = wanted.filter((s) => !fresh.has(s));
-  const got = await Promise.all(stale.map(async (s) => [s, await yahoo(s)] as const));
+  const got = await Promise.all(stale.map(async (s) => [s, await quote(s)] as const));
   const wrong = got.filter(([, q]) => q === WRONG).map(([s]) => s);
   if (wrong.length) await admin.from("quotes").delete().in("symbol", wrong);
   const rows = got.flatMap(([symbol, q]) => (q && q !== WRONG ? [{ symbol, price: q.price, session: q.session, fetched_at: new Date().toISOString() }] : []));
