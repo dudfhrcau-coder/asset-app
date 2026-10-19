@@ -77,3 +77,4 @@ create table if not exists public.molit_cache (
 );
 alter table public.molit_cache enable row level security;
 alter table public.quotes add column if not exists prev numeric; -- 전날 종가
+alter table public.quotes add column if not exists hi2y numeric, add column if not exists hi_at timestamptz;

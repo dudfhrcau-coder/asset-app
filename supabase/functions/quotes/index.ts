@@ -64,6 +64,23 @@ async function naver(symbol: string): Promise<Quote | typeof WRONG | null> {
   }
 }
 
+// 최근 2년 최고가(주봉 고가 중 최댓값). 시뮬레이션 화면에서만 요청하고 12시간 캐시해요.
+const HI_TTL_MS = 12 * 60 * 60 * 1000;
+async function high2y(symbol: string): Promise<number | null> {
+  try {
+    const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=2y&interval=1wk`, { headers: { "User-Agent": "Mozilla/5.0" } });
+    if (!r.ok) return null;
+    const res = (await r.json())?.chart?.result?.[0];
+    const meta = res?.meta;
+    const ex = String(meta?.fullExchangeName ?? "");
+    if (meta?.instrumentType === "MUTUALFUND" || (symbol.endsWith(".KS") && ex === "KOSDAQ") || (symbol.endsWith(".KQ") && ex !== "KOSDAQ")) return null;
+    const hs = ((res?.indicators?.quote?.[0]?.high ?? []) as (number | null)[]).filter((x): x is number => typeof x === "number");
+    return hs.length ? Math.max(...hs) : null;
+  } catch {
+    return null;
+  }
+}
+
 const quote = async (s: string) => (/\.K[SQ]$/.test(s) ? (await naver(s)) ?? (await yahoo(s)) : await yahoo(s));
 
 Deno.serve(async (req) => {
@@ -78,10 +95,28 @@ Deno.serve(async (req) => {
   const { data: member } = await user.rpc("is_member");
   if (!member) return json({ error: "not a family member" }, 403);
 
-  const { symbols = [] } = await req.json().catch(() => ({}));
+  const { symbols = [], highs = false } = await req.json().catch(() => ({}));
   const wanted = [...new Set([...(symbols as string[]).filter((s) => /^[A-Z0-9.\-^=]{1,15}$/.test(s)), FX])].slice(0, 60);
 
   const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  if (highs) {
+    const syms = wanted.filter((s) => s !== FX);
+    const { data: hc } = await admin.from("quotes").select("symbol,hi2y,hi_at").in("symbol", syms);
+    const out: Record<string, number> = {};
+    const todo: string[] = [];
+    for (const s of syms) {
+      const c = hc?.find((r) => r.symbol === s);
+      if (c?.hi2y && c.hi_at && Date.now() - new Date(c.hi_at).getTime() < HI_TTL_MS) out[s] = Number(c.hi2y);
+      else todo.push(s);
+    }
+    const got = await Promise.all(todo.map(async (s) => [s, await high2y(s)] as const));
+    for (const [s, h] of got) {
+      if (h == null) continue;
+      out[s] = h;
+      if (hc?.some((r) => r.symbol === s)) await admin.from("quotes").update({ hi2y: h, hi_at: new Date().toISOString() }).eq("symbol", s);
+    }
+    return json({ highs: out });
+  }
   const { data: cached } = await admin.from("quotes").select("symbol,price,session,prev,fetched_at").in("symbol", wanted);
   const fresh = new Map<string, Quote>();
   for (const q of cached ?? []) if (Date.now() - new Date(q.fetched_at).getTime() < TTL_MS) fresh.set(q.symbol, { price: Number(q.price), session: q.session, prev: q.prev == null ? null : Number(q.prev) });

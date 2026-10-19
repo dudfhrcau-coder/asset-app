@@ -189,7 +189,7 @@ h2{font-size:13px;color:var(--muted);font-weight:600;margin:6px 2px 0;display:fl
 <script src="config.js"></script>
 <script>
 const KEY='asset-app';
-const APP_VER='10.19-10';
+const APP_VER='10.19-11';
 // 한 화면만 쓰는 앱이라 브라우저 잠금은 쓰지 않음. 새로고침할 때 이전 화면의 잠금이 남아 멈추는 문제를 피함
 const sb=supabase.createClient(window.APP_CONFIG.supabaseUrl,window.APP_CONFIG.supabaseAnonKey,{auth:{lock:(_n,_t,fn)=>fn()}});
 // S.items는 assets 테이블의 data 열. 현재가와 환율은 시세 서버에서 받아 화면에만 씀.
@@ -385,10 +385,18 @@ function news(){
 
 /* ---------- 가격 시뮬레이션 (저장하지 않고 화면에서만 계산) ---------- */
 const SIM={fx:null,px:{}};
+/* 종목별 최근 2년 최고가(시세 서버가 12시간 캐시). 시뮬레이션을 열 때 한 번 받아요 */
+const HI={};let hiLoading=false;
+function hiOf(g){if(!g.symbol)return null;return g.market==='US'?HI[g.symbol]??null:HI[g.symbol+'.KS']??HI[g.symbol+'.KQ']??null}
+async function loadHighs(){if(hiLoading||!sb)return;hiLoading=true;
+  try{const symbols=[...new Set(S.items.filter(i=>i.kind==='stock'&&i.symbol).flatMap(qsyms))];if(!symbols.length)return;
+    const {data,error}=await sb.functions.invoke('quotes',{body:{symbols,highs:true}});if(error||!data?.highs)return;
+    Object.assign(HI,data.highs);if(tab==='sim'&&!document.activeElement?.matches('[data-sim],[data-simfx]'))render()}
+  catch{}finally{hiLoading=false}}
 function simGroups(){
   const m=new Map();
   S.items.filter(i=>i.kind==='stock').forEach(i=>{const k=i.market+':'+(i.symbol||i.name);
-    const g=m.get(k)||{k,name:i.name,market:i.market,qty:0,cost:0,price:i.price};g.qty+=i.qty;g.cost+=cost(i);m.set(k,g)});
+    const g=m.get(k)||{k,name:i.name,symbol:i.symbol,market:i.market,qty:0,cost:0,price:i.price};g.qty+=i.qty;g.cost+=cost(i);m.set(k,g)});
   return [...m.values()].sort((a,b)=>b.cost-a.cost);
 }
 function simCalc(){
@@ -426,16 +434,18 @@ function simChg(g){const p=SIM.px[g.k]??g.price,c=pct(p,g.price),v=g.qty*p*(g.ma
 function sim(){
   const gs=simGroups(),fx=SIM.fx??S.fx.usdkrw;
   if(!gs.length)return `<div class="simbar"><button class="btn" type="button" id="simBack">‹ 돌아가기</button></div><div class="group"><div class="empty">주식을 추가하면 시뮬레이션할 수 있어요.</div></div>`;
-  const cur=g=>g.market==='US'?'$'+g.price.toLocaleString('en-US',{maximumFractionDigits:2}):won(g.price)+'원';
+  const fmt=(g,v)=>g.market==='US'?'$'+v.toLocaleString('en-US',{maximumFractionDigits:2}):won(v)+'원',cur=g=>fmt(g,g.price);
+  const hiTxt=g=>{const h=hiOf(g);return h?` · 2년 최고 ${fmt(g,h)} <span class="${cls(g.price-h)}">(${sign(g.price-h)}${pct(g.price,h).toFixed(0)}%)</span>`:''};
+  const hasHi=gs.some(g=>hiOf(g));
   return `<div style="display:flex;flex-direction:column;gap:14px">
   <div class="simbar"><button class="btn" type="button" id="simBack">‹ 돌아가기</button><h2>가격 시뮬레이션</h2></div>
   <section class="hero" id="simResult">${simResult()}</section>
   <div><div class="label" style="margin:0 2px 6px">모든 종목을 현재가 대비 한 번에</div>
-  <div class="pcts">${[-50,-30,-10,0,10,30,50,100].map(p=>`<button class="btn" type="button" data-pct="${p}">${p?sign(p)+p+'%':'현재가'}</button>`).join('')}</div></div>
+  <div class="pcts">${[-50,-30,-10,0,10,30,50,100].map(p=>`<button class="btn" type="button" data-pct="${p}">${p?sign(p)+p+'%':'현재가'}</button>`).join('')}${hasHi?'<button class="btn" type="button" data-hi>2년 최고가</button>':''}</div></div>
   <div class="group">
     <div class="simrow"><span><span class="name">원/달러 환율</span><br><span class="sub">현재 ${S.fx.usdkrw.toLocaleString('ko-KR',{maximumFractionDigits:1})}원</span></span>
       <input inputmode="decimal" type="number" step="any" data-simfx value="${+fx.toFixed(1)}" aria-label="환율"></div>
-    ${gs.map(g=>`<div class="simrow"><span><span class="name">${esc(g.name)}</span><br><span class="sub">${g.qty.toLocaleString('ko-KR')}주 · 현재 ${cur(g)}</span></span>
+    ${gs.map(g=>`<div class="simrow"><span><span class="name">${esc(g.name)}</span><br><span class="sub">${g.qty.toLocaleString('ko-KR')}주 · 현재 ${cur(g)}${hiTxt(g)}</span></span>
       <input inputmode="decimal" type="number" step="any" data-sim="${esc(g.k)}" value="${+(SIM.px[g.k]??g.price).toFixed(g.market==='US'?2:0)}" aria-label="${esc(g.name)} 가격">
       <span></span><span class="chg" data-chg="${esc(g.k)}">${simChg(g)}</span></div>`).join('')}
   </div>
@@ -544,8 +554,9 @@ document.addEventListener('click',e=>{
   const t=e.target.closest('.tabs button');if(t){tab=t.dataset.tab;try{localStorage.setItem(KEY+':tab',tab)}catch(_){}render();window.scrollTo(0,0);return}
   const r=e.target.closest('.row');if(r){openSheet(S.items.find(i=>i.id===r.dataset.id));return}
   if(e.target.id==='refresh')refresh(e.target);
-  if(e.target.closest('#openSim')){tab='sim';render();window.scrollTo(0,0);return}
+  if(e.target.closest('#openSim')){tab='sim';render();loadHighs();window.scrollTo(0,0);return}
   if(e.target.id==='simBack'){tab='home';render();window.scrollTo(0,0);return}
+  if(e.target.closest('[data-hi]')){SIM.px={};simGroups().forEach(g=>{const h=hiOf(g);if(h)SIM.px[g.k]=h});render();return}
   const pb=e.target.closest('[data-pct]');if(pb){const f=1+pb.dataset.pct/100;SIM.px={};if(f!==1)simGroups().forEach(g=>SIM.px[g.k]=g.price*f);render();return}
   if(e.target.id==='logout')sb.auth.signOut();
 });
