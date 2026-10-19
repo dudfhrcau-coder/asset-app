@@ -189,7 +189,7 @@ h2{font-size:13px;color:var(--muted);font-weight:600;margin:6px 2px 0;display:fl
 <script src="config.js"></script>
 <script>
 const KEY='asset-app';
-const APP_VER='10.19-8';
+const APP_VER='10.19-9';
 // 한 화면만 쓰는 앱이라 브라우저 잠금은 쓰지 않음. 새로고침할 때 이전 화면의 잠금이 남아 멈추는 문제를 피함
 const sb=supabase.createClient(window.APP_CONFIG.supabaseUrl,window.APP_CONFIG.supabaseAnonKey,{auth:{lock:(_n,_t,fn)=>fn()}});
 // S.items는 assets 테이블의 data 열. 현재가와 환율은 시세 서버에서 받아 화면에만 씀.
@@ -198,10 +198,11 @@ let tab='home';
 try{tab=localStorage.getItem(KEY+':tab')||'home'}catch(e){}
 const LIVE={};// symbol -> 현재가
 const SESS={};// symbol -> 'pre' | 'post' (장전·장후 가격일 때)
-try{const c=JSON.parse(localStorage.getItem(KEY+':quotes'));if(c){Object.assign(LIVE,c.prices||{});Object.assign(SESS,c.sessions||{});if(c.usdkrw)S.fx={usdkrw:c.usdkrw,at:c.at,src:'지난 시세'}}}catch(e){}
+const PREV={};// symbol -> 전날 종가 (오늘 등락률)
+try{const c=JSON.parse(localStorage.getItem(KEY+':quotes'));if(c){Object.assign(LIVE,c.prices||{});Object.assign(SESS,c.sessions||{});Object.assign(PREV,c.prev||{});if(c.usdkrw)S.fx={usdkrw:c.usdkrw,at:c.at,src:'지난 시세'}}}catch(e){}
 // 국내 종목은 코스피(.KS)와 코스닥(.KQ)을 둘 다 물어보고 값이 온 쪽을 씀
 const qsyms=i=>i.market==='KR'?[i.symbol+'.KS',i.symbol+'.KQ']:[i.symbol];
-function withLive(it){if(it.kind!=='stock')return it;const s=qsyms(it).find(s=>LIVE[s]);return s?{...it,price:LIVE[s],session:SESS[s]||''}:it}
+function withLive(it){if(it.kind!=='stock')return it;const s=qsyms(it).find(s=>LIVE[s]);return s?{...it,price:LIVE[s],session:SESS[s]||'',prev:PREV[s]||null}:it}
 
 async function loadAssets(){
   const {data,error}=await sb.from('assets').select('id,data').order('updated_at');
@@ -348,7 +349,7 @@ function stocks(){
       h+=`<button class="row" type="button" data-id="${it.id}">
         <span class="name">${esc(it.name)}<span class="tag">${it.market==='US'?'미국':'국내'}</span></span>
         <span class="val num">${won(val(it))}원</span>
-        <span class="sub">${it.qty.toLocaleString('ko-KR')}주 · 평단 ${avg(it)} · 현재 ${price(it)}</span>
+        <span class="sub">${it.qty.toLocaleString('ko-KR')}주 · 평단 ${avg(it)} · 현재 ${price(it)}${it.prev?` · 오늘 <span class="num ${cls(it.price-it.prev)}">${sign(it.price-it.prev)}${pct(it.price,it.prev).toFixed(2)}%</span>`:''}</span>
         <span class="rt num ${cls(p)}">${sign(p)}${p.toFixed(2)}%</span>
         <span class="sub">원금 <span class="num">${won(cost(it))}원</span></span>
         <span class="rt num ${cls(p)}">${sign(p)}${won(val(it)-cost(it))}원</span></button>`}
@@ -529,10 +530,10 @@ async function refresh(btn,quiet){
   const symbols=[...new Set(S.items.filter(i=>i.kind==='stock'&&i.symbol).flatMap(qsyms))];
   const {data,error}=await sb.functions.invoke('quotes',{body:{symbols}});
   if(error||!data){if(!quiet)toast('시세를 가져오지 못했어요. 잠시 뒤 다시 눌러주세요.');render();return}
-  for(const k in LIVE)delete LIVE[k];Object.assign(LIVE,data.prices||{});for(const k in SESS)delete SESS[k];Object.assign(SESS,data.sessions||{});
+  for(const k in LIVE)delete LIVE[k];Object.assign(LIVE,data.prices||{});for(const k in SESS)delete SESS[k];Object.assign(SESS,data.sessions||{});for(const k in PREV)delete PREV[k];Object.assign(PREV,data.prev||{});
   if(data.usdkrw)S.fx={usdkrw:data.usdkrw,at:data.at||Date.now(),src:'Yahoo Finance'};
   S.items=S.items.map(withLive);
-  try{localStorage.setItem(KEY+':quotes',JSON.stringify({prices:LIVE,sessions:SESS,usdkrw:S.fx.usdkrw,at:S.fx.at}))}catch(e){}
+  try{localStorage.setItem(KEY+':quotes',JSON.stringify({prices:LIVE,sessions:SESS,prev:PREV,usdkrw:S.fx.usdkrw,at:S.fx.at}))}catch(e){}
   render();
   if(!quiet){const P=data.prices||{},miss=[...new Set(S.items.filter(i=>i.kind==='stock'&&i.symbol&&!qsyms(i).some(x=>x in P)).map(i=>i.name))];toast(miss.length?'일부 종목 시세를 못 가져왔어요: '+miss.join(', '):'시세를 새로 가져왔어요')}
 }
