@@ -189,7 +189,7 @@ h2{font-size:13px;color:var(--muted);font-weight:600;margin:6px 2px 0;display:fl
 <script src="config.js"></script>
 <script>
 const KEY='asset-app';
-const APP_VER='10.19-11';
+const APP_VER='10.20-1';
 // 한 화면만 쓰는 앱이라 브라우저 잠금은 쓰지 않음. 새로고침할 때 이전 화면의 잠금이 남아 멈추는 문제를 피함
 const sb=supabase.createClient(window.APP_CONFIG.supabaseUrl,window.APP_CONFIG.supabaseAnonKey,{auth:{lock:(_n,_t,fn)=>fn()}});
 // S.items는 assets 테이블의 data 열. 현재가와 환율은 시세 서버에서 받아 화면에만 씀.
@@ -213,14 +213,14 @@ async function loadAssets(){
 async function loadHomes(){
   const {data,error}=await sb.from('homes').select('id,kind,data,as_of').order('id');
   if(error||!data)return;
-  HOMES={budget:data.find(r=>r.kind==='budget')?.data||null,watch:data.filter(r=>r.kind==='watch').map(r=>r.data),
-    pick:data.find(r=>r.kind==='pick')?.data||null,asOf:data.reduce((a,r)=>r.as_of>a?r.as_of:a,'')};
+  HOMES={budget:data.find(r=>r.kind==='budget')?.data||null,
+    picks:data.filter(r=>r.kind==='pick').map(r=>r.data).sort((a,b)=>TIER.indexOf(a.tier)-TIER.indexOf(b.tier)),asOf:data.reduce((a,r)=>r.as_of>a?r.as_of:a,'')};
   if(tab==='home')render();
   loadTrades();
 }
-// 관심 단지·추천 단지의 실거래는 국토부 API에서 바로 받아 덮어씀(실패하면 저장된 값 유지)
+// 추천 단지의 실거래는 국토부 API에서 바로 받아 덮어씀(실패하면 저장된 값 유지)
 async function loadTrades(){
-  const list=[...HOMES.watch,HOMES.pick].filter(x=>x?.molit);if(!list.length)return;
+  const list=HOMES.picks.filter(x=>x?.molit);if(!list.length)return;
   const {data,error}=await sb.functions.invoke('trades',{body:{items:list.map((x,i)=>({id:String(i),...x.molit}))}});
   if(error||!data?.trades)return;
   list.forEach((x,i)=>{const t=data.trades[String(i)];if(t?.length){x.trades=t;x.molitOk=true}});
@@ -305,22 +305,14 @@ function fit(region,price){const b=HOMES.budget?.[region];if(!b||!price)return '
 function trades(list,gov){if(!list?.length)return '';
   return `<div class="label">최근 실거래${gov?' · 국토부':''}</div><div class="trades">${list.slice(0,5).map(t=>`<div><span>${esc(String(t.d).replace(/^\d{4}-0?(\d+)-0?(\d+)$/,'$1/$2'))}</span><span class="hint">${t.dong?esc(t.dong)+'동 ':''}${t.floor!=null?esc(t.floor)+'층':''}</span><span class="p num">${eok(t.price)}</span></div>`).join('')}</div>`}
 function homes(){
-  const H=HOMES;if(!H.budget&&!H.watch.length&&!H.pick)return '';
+  const H=HOMES;if(!H.budget&&!H.picks.length)return '';
   const asOf=(H.asOf||'').replace(/^\d{4}-0?(\d+)-0?(\d+)$/,'$1월 $2일');
   let h=`<h2><span>부동산</span><span>${asOf} 기준</span></h2>`;
   const b=H.budget;
   if(b)h+=`<section class="hcard"><div class="htop"><span class="hname">살 수 있는 집값</span><span class="hint">대출+자산</span></div>
-    <div class="budget"><div><span class="label">김포</span><span class="big num">${eok(b.gimpo?.price_max)}</span><span class="hint">대출 ${eok(b.gimpo?.loan_max)}</span></div>
-    <div><span class="label">서울(강서·양천·영등포)</span><span class="big num">${eok(b.gangseo?.price_max)}</span><span class="hint">대출 ${eok(b.gangseo?.loan_max)}</span></div></div>
+    <div class="budget"><div><span class="label">서울(강서·양천·영등포)</span><span class="big num">${eok(b.gangseo?.price_max)}</span><span class="hint">대출 ${eok(b.gangseo?.loan_max)}</span></div></div>
     ${b.note?`<div class="hint">${esc(b.note)}</div>`:''}</section>`;
-  for(const w of H.watch){const lo=w.ask?.min;
-    h+=`<section class="hcard"><div class="htop"><span class="hname">${esc(w.name)} <span class="hint">${esc(w.type||'')}</span></span>${fit(w.region,lo)}</div>
-    ${w.station?`<div class="hint">🚉 ${esc(w.station)}</div>`:''}
-    ${w.ask?`<div><span class="label">${esc(w.ask.label||'지금 매물 호가')}</span><div class="big num">${eok(w.ask.min)}${w.ask.max&&w.ask.max!==w.ask.min?' ~ '+eok(w.ask.max):''}</div>${w.ask.note?`<div class="hint">${esc(w.ask.note)}</div>`:''}</div>`:''}
-    ${w.target?.length?`<div class="label">${esc(w.target_label||'원하는 동·층 매물')}</div><div class="trades">${w.target.map(t=>`<div><span>${esc(t.dong)}동</span><span class="hint">${esc(t.floor)}층</span><span class="p num">${eok(t.price)}</span></div>`).join('')}</div>`:(w.target_label?`<div class="hint">${esc(w.target_label)}: 지금 올라온 매물이 없어요</div>`:'')}
-    ${trades(w.trades,w.molitOk)}${w.note?`<div class="hint">${esc(w.note)}</div>`:''}</section>`}
-  const p=H.pick;
-  if(p)h+=`<section class="hcard"><div class="htop"><span class="hname"><span class="tag2">${p.stretch?'목표 범위 추천':'오늘의 추천'}</span> ${esc(p.name)}</span>${fit(p.region,p.price)}</div>
+  for(const p of H.picks)h+=`<section class="hcard"><div class="htop"><span class="hname"><span class="tag2">추천 ${esc(p.tier||'')}</span> ${esc(p.name)}</span>${fit(p.region,p.price)}</div>
     <div class="hint">${[p.area,p.households&&p.households.toLocaleString('ko-KR')+'세대',p.built&&p.built+'년',p.type].filter(Boolean).map(esc).join(' · ')}</div>
     ${p.station?`<div class="hint">🚉 ${esc(p.station)}</div>`:''}
     <div><span class="label">시세</span> <span class="big num">${eok(p.price)}</span>${p.price_note?` <span class="hint">${esc(p.price_note)}</span>`:''}</div>
@@ -358,7 +350,7 @@ function stocks(){
 }
 
 // 종목별 소식: Claude가 정리해 news 테이블에 넣음.
-let HOMES={budget:null,watch:[],pick:null,asOf:''};
+let HOMES={budget:null,picks:[],asOf:''};const TIER=['상','중','하'];
 let NEWS={asOf:null,items:{}};
 // 영문 회사 이름: 해외 뉴스 검색어로 씀. 없으면 티커로 검색.
 function news(){
@@ -420,14 +412,14 @@ function simBudget(region,dWon){const B=HOMES.budget,b=B?.[region];if(!b||B.asse
   for(let i=0;i<30;i++)p=Math.max(0,(A+Math.min(b.loan_max,p*0.7,60000))/k);
   return Math.round(p)}
 function simHomes(d){const B=HOMES.budget;if(!B)return '';
-  const rg=[['gimpo','김포'],['gangseo','서울']].map(([r,n])=>({r,n,p:simBudget(r,d),now:B[r]?.price_max})).filter(x=>x.p!=null);
+  const rg=[['gangseo','서울']].map(([r,n])=>({r,n,p:simBudget(r,d),now:B[r]?.price_max})).filter(x=>x.p!=null);
   if(!rg.length)return '';
-  const hs=[...HOMES.watch.map(w=>({name:w.name,region:w.region,price:w.ask?.min})),HOMES.pick&&{name:HOMES.pick.name,region:HOMES.pick.region,price:HOMES.pick.price,pick:1}].filter(x=>x&&x.price);
+  const hs=HOMES.picks.map(p=>({name:p.name,region:p.region,price:p.price,tier:p.tier})).filter(x=>x.price);
   const gap=x=>{const m=simBudget(x.region,d);if(m==null)return '';const g=m-x.price;
     return `<span class="num ${g>=0?'':'up'}">${g>=0?eok(g)+' 여유':eok(-g)+' 부족'}</span>`};
   return `<div class="label" style="margin-top:6px">살 수 있는 집값</div>
     <div class="budget">${rg.map(x=>{const c=x.p-x.now;return `<div><span class="label">${x.n}</span><span class="big num">${eok(x.p)}</span><span class="hint num ${cls(c)}">${c?(c>0?"+":"-")+eok(Math.abs(c)):"변동 없음"}</span></div>`}).join('')}</div>
-    ${hs.length?`<div class="trades">${hs.map(x=>`<div><span>${x.pick?'추천 · ':''}${esc(x.name)}</span><span class="hint num">${eok(x.price)}</span>${gap(x)}</div>`).join('')}</div>`:''}
+    ${hs.length?`<div class="trades">${hs.map(x=>`<div><span>${x.tier?'추천 '+esc(x.tier)+' · ':''}${esc(x.name)}</span><span class="hint num">${eok(x.price)}</span>${gap(x)}</div>`).join('')}</div>`:''}
     <div class="hint">주식을 다 팔고 세금을 낸 뒤 남는 돈을 집 사는 데 보탠다고 보고 계산했어요. 해외주식 양도세는 두 사람 공제(250만원씩)를 합쳐 계산해요.</div>`}
 function simChg(g){const p=SIM.px[g.k]??g.price,c=pct(p,g.price),v=g.qty*p*(g.market==='US'?(SIM.fx??S.fx.usdkrw):1);
   return `<span class="${cls(c)}">${sign(c)}${c.toFixed(1)}%</span> · <span class="num">${short(v)}원</span>`}
